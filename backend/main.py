@@ -7,25 +7,25 @@ from database import (
     init_db,
     save_incident,
     get_incidents,
-    get_audit_logs
+    get_audit_logs,
 )
 
 
 app = FastAPI(
     title="GhostWave API",
     description="Telemetry anomaly and integrity monitoring demo",
-    version="1.0.0"
+    version="1.1.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 detector = GhostWaveDetector()
@@ -40,7 +40,7 @@ def startup():
 def home():
     return {
         "message": "GhostWave API is running",
-        "status": "online"
+        "status": "online",
     }
 
 
@@ -60,7 +60,7 @@ def receive_telemetry(data: dict):
         "source": data.get("source", "unknown"),
         "alerts": alerts,
         "alert_count": len(alerts),
-        "status": "alert" if alerts else "normal"
+        "status": "alert" if alerts else "normal",
     }
 
 
@@ -71,15 +71,12 @@ def simulate(scenario: str):
             status_code=400,
             detail={
                 "error": "Unknown scenario",
-                "allowed_scenarios": sorted(VALID_SCENARIOS)
-            }
+                "allowed_scenarios": sorted(VALID_SCENARIOS),
+            },
         )
 
     packets = generate_scenario(scenario)
     results = []
-
-    # Use a fresh detector for each simulation so previous simulations
-    # do not influence the current scenario.
     simulation_detector = GhostWaveDetector()
 
     for packet in packets:
@@ -91,8 +88,14 @@ def simulate(scenario: str):
         results.append({
             "packet": packet,
             "alerts": alerts,
-            "alert_count": len(alerts)
+            "alert_count": len(alerts),
         })
+
+    alert_types = sorted({
+        alert.get("type", "unknown")
+        for result in results
+        for alert in result["alerts"]
+    })
 
     return {
         "scenario": scenario,
@@ -100,7 +103,12 @@ def simulate(scenario: str):
         "alerts_detected": sum(
             result["alert_count"] for result in results
         ),
-        "results": results
+        "alert_types": alert_types,
+        "results": results,
+        "note": (
+            "Synthetic simulation output. An anomaly is not, by itself, "
+            "proof of malicious activity."
+        ),
     }
 
 
@@ -116,28 +124,19 @@ def audit():
 
 @app.get("/evaluate")
 def evaluate():
-    """Run a basic synthetic scenario check; not a real-world accuracy test."""
+    """
+    Run deterministic synthetic checks for the configured scenarios.
+    This is a smoke test, not a validated real-world accuracy benchmark.
+    """
 
-    suspicious_types = {
-        "network_fault": {
-            "signal_jump",
-            "missing_telemetry",
-            "invalid_metric",
-            "repeated_payload"
-        },
-        "replay": {
-            "repeated_payload",
-            "duplicate_sequence"
-        },
-        "manipulation": {
-            "signal_jump",
-            "invalid_metric",
-            "repeated_payload"
-        },
-        "missing_data": {
-            "missing_sequence",
-            "missing_telemetry"
-        }
+    # Expected indicators are intentionally scenario-specific. A scenario
+    # does not need to trigger every possible detector rule to be useful.
+    expected_indicators = {
+        "normal": set(),
+        "replay": {"repeated_payload"},
+        "network_fault": {"signal_jump"},
+        "manipulation": {"signal_jump", "invalid_metric"},
+        "missing_data": {"missing_sequence"},
     }
 
     evaluation = {}
@@ -153,24 +152,28 @@ def evaluate():
             total_alerts += len(alerts)
 
             for alert in alerts:
-                detected_types.add(alert["type"])
+                detected_types.add(alert.get("type", "unknown"))
 
-        expected = suspicious_types.get(scenario, set())
+        expected = expected_indicators.get(scenario, set())
+        observed = detected_types.intersection(expected)
 
         evaluation[scenario] = {
             "packets_processed": len(packets),
             "alerts_count": total_alerts,
             "alert_types": sorted(detected_types),
             "expected_indicators": sorted(expected),
-            "expected_indicator_observed": sorted(
-                detected_types.intersection(expected)
-            )
+            "expected_indicator_observed": sorted(observed),
+            "expected_indicator_missing": sorted(expected - detected_types),
+            "check_passed": expected.issubset(detected_types),
         }
 
     return {
         "note": (
-            "Synthetic demonstration only. These results are not "
-            "a validated measure of real-world detection accuracy."
+            "Synthetic demonstration only. These results are not a "
+            "validated measure of real-world detection accuracy."
         ),
-        "scenarios": evaluation
+        "overall_check_passed": all(
+            item["check_passed"] for item in evaluation.values()
+        ),
+        "scenarios": evaluation,
     }
