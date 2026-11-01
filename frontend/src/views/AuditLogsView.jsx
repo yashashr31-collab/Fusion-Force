@@ -7,7 +7,8 @@ import {
   Eye,
   CheckCircle2,
   Lock,
-  Check
+  Check,
+  ShieldCheck
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 import PacketModal from '../components/PacketModal';
@@ -47,13 +48,19 @@ export default function AuditLogsView() {
   };
 
   return (
-    <div className="view-container audit-logs-view">
+    <div className="view-container audit-logs-view animate-fade-in">
       {/* Header */}
       <div className="view-header">
         <div>
-          <h2 className="view-title">Cryptographic Audit Ledger</h2>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-teal)' }} />
+              <span className="soc-status-text">CRYPTOGRAPHIC AUDIT LEDGER</span>
+            </span>
+          </div>
+          <h2 className="view-title">Immutable Verification Audit Ledger</h2>
           <p className="view-subtitle">
-            Immutable SQLite audit trail tracking automated security classifications and detector triggers.
+            Tamper-evident SQLite audit trail tracking automated security classifications, telemetry events, and detector triggers.
           </p>
         </div>
         <div className="view-header-actions">
@@ -63,7 +70,7 @@ export default function AuditLogsView() {
             disabled={auditLogs.length === 0}
             title="Download audit logs as JSON file"
           >
-            {downloadSuccess ? <Check size={14} className="text-emerald" /> : <Download size={14} />}
+            {downloadSuccess ? <Check size={14} className="text-teal" /> : <Download size={14} />}
             <span>{downloadSuccess ? 'Ledger Exported' : 'Export Ledger (JSON)'}</span>
           </button>
           <button
@@ -84,9 +91,9 @@ export default function AuditLogsView() {
             <Lock size={20} className="text-cyan" />
           </div>
           <div>
-            <div className="font-semibold text-primary">Tamper-Evident Audit Trail Active</div>
+            <div className="font-semibold text-primary">Tamper-Evident Security Ledger Active</div>
             <div className="text-xs text-muted">
-              All incident creations and alerts are sequentially committed to the database ledger with nanosecond UTC timestamps.
+              All incident creations, telemetry verifications, and alert classifications are sequentially committed to the database ledger with nanosecond UTC timestamps.
             </div>
           </div>
         </div>
@@ -144,12 +151,14 @@ export default function AuditLogsView() {
             <tbody>
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center" style={{ padding: '40px 20px' }}>
+                  <td colSpan={7} className="text-center" style={{ padding: '48px 20px' }}>
                     <div className="empty-alerts-state">
-                      <CheckCircle2 size={36} className="text-emerald" />
-                      <p className="font-semibold text-primary">Audit Log Clean</p>
-                      <span className="text-xs text-muted">
-                        No audit records in the database. Trigger an attack simulation to populate audit entries.
+                      <ShieldCheck size={40} className="text-teal" />
+                      <p className="font-semibold text-primary" style={{ fontSize: 16, marginTop: 8 }}>
+                        Audit Log Clean
+                      </p>
+                      <span className="text-xs text-muted" style={{ maxWidth: 420, display: 'inline-block', marginTop: 4 }}>
+                        No audit records in the database. Trigger an attack simulation in Overview to populate and verify audit entries.
                       </span>
                     </div>
                   </td>
@@ -171,7 +180,7 @@ export default function AuditLogsView() {
                         </span>
                       </td>
                       <td className="mono text-xs text-muted whitespace-nowrap">
-                        <div>{formatDateTime(log.created_at)}</div>
+                        <div className="text-primary font-medium">{formatDateTime(log.created_at)}</div>
                         <div className="text-2xs text-cyan">{timeAgo(log.created_at)}</div>
                       </td>
                       <td className="mono text-xs font-semibold text-highlight">

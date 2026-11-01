@@ -1,23 +1,29 @@
 /**
  * GhostWave API Service Layer
- * Interfaces strictly with existing FastAPI backend endpoints:
+ * Interfaces with existing FastAPI backend endpoints when available:
  * - GET /health
  * - GET /incidents
  * - GET /audit
  * - GET /evaluate
  * - GET /simulate/{scenario}
  * - POST /telemetry
+ *
+ * Automatically falls back to the in-browser standalone engine when
+ * running on Firebase Hosting without a deployed backend server.
  */
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+import {
+  VALID_SCENARIOS,
+  mockFetchHealth,
+  mockFetchIncidents,
+  mockFetchAuditLogs,
+  mockSimulate,
+  mockSubmitTelemetry,
+  mockFetchEvaluation,
+  mockAnalyzeCsv
+} from './mockEngine';
 
-export const VALID_SCENARIOS = [
-  'normal',
-  'network_fault',
-  'replay',
-  'manipulation',
-  'missing_data'
-];
+export { VALID_SCENARIOS };
 
 export const SCENARIO_METADATA = {
   normal: {
@@ -62,6 +68,39 @@ export const SCENARIO_METADATA = {
   }
 };
 
+// Configurable API Base URL
+export function getApiBaseUrl() {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+  if (typeof window !== 'undefined') {
+    const savedUrl = localStorage.getItem('ghostwave_api_base_url');
+    if (savedUrl && savedUrl !== 'http://127.0.0.1:8000' && savedUrl !== 'http://localhost:8000') {
+      return savedUrl.replace(/\/+$/, '');
+    }
+  }
+  return envUrl || 'http://127.0.0.1:8000';
+}
+
+export function setApiBaseUrl(url) {
+  if (typeof window !== 'undefined') {
+    if (!url) {
+      localStorage.removeItem('ghostwave_api_base_url');
+    } else {
+      localStorage.setItem('ghostwave_api_base_url', url.replace(/\/+$/, ''));
+    }
+  }
+}
+
+// Current mode tracker: 'live' | 'standalone'
+let activeMode = 'standalone';
+
+export function getEngineMode() {
+  return activeMode;
+}
+
+export function setEngineMode(mode) {
+  activeMode = mode;
+}
+
 /**
  * Standard request helper with timeout and friendly error propagation
  */
@@ -70,7 +109,8 @@ async function request(endpoint, options = {}, timeoutMs = 8000) {
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
@@ -108,30 +148,66 @@ async function request(endpoint, options = {}, timeoutMs = 8000) {
 
 /**
  * Health check: GET /health
+ * Tries live backend; falls back to in-browser standalone engine if unreachable.
  */
 export async function fetchHealth() {
-  return request('/health', { method: 'GET' }, 4000);
+  try {
+    const res = await request('/health', { method: 'GET' }, 8000);
+    if (res && res.status === 'online') {
+      activeMode = 'live';
+      return { status: 'online', mode: 'live' };
+    }
+    throw new Error('Unexpected response from health check');
+  } catch {
+    // Graceful fallback to standalone engine
+    activeMode = 'standalone';
+    return mockFetchHealth();
+  }
 }
 
 /**
  * Retrieve incidents log: GET /incidents
  */
 export async function fetchIncidents() {
-  return request('/incidents', { method: 'GET' });
+  if (activeMode === 'live') {
+    try {
+      return await request('/incidents', { method: 'GET' });
+    } catch (err) {
+      console.warn('Backend /incidents unreachable, using local engine:', err.message);
+      activeMode = 'standalone';
+    }
+  }
+  return mockFetchIncidents();
 }
 
 /**
  * Retrieve audit log: GET /audit
  */
 export async function fetchAuditLogs() {
-  return request('/audit', { method: 'GET' });
+  if (activeMode === 'live') {
+    try {
+      return await request('/audit', { method: 'GET' });
+    } catch (err) {
+      console.warn('Backend /audit unreachable, using local engine:', err.message);
+      activeMode = 'standalone';
+    }
+  }
+  return mockFetchAuditLogs();
 }
 
 /**
  * Retrieve synthetic evaluation results: GET /evaluate
  */
 export async function fetchEvaluation() {
-  return request('/evaluate', { method: 'GET' });
+  if (activeMode === 'live') {
+    try {
+      return await request('/evaluate', { method: 'GET' });
+    } catch (err) {
+      console.warn('Backend /evaluate unreachable, using local engine:', err.message);
+      activeMode = 'standalone';
+    }
+  }
+  return mockFetchEvaluation();
 }
 
 /**
@@ -141,17 +217,95 @@ export async function runSimulation(scenario) {
   if (!VALID_SCENARIOS.includes(scenario)) {
     throw new Error(`Invalid scenario: "${scenario}". Must be one of: ${VALID_SCENARIOS.join(', ')}`);
   }
-  return request(`/simulate/${encodeURIComponent(scenario)}`, { method: 'GET' });
+
+  if (activeMode === 'live') {
+    try {
+      return await request(`/simulate/${encodeURIComponent(scenario)}`, { method: 'GET' });
+    } catch (err) {
+      console.warn(`Backend /simulate/${scenario} unreachable, using local engine:`, err.message);
+      activeMode = 'standalone';
+    }
+  }
+  return mockSimulate(scenario);
 }
 
 /**
  * Submit live telemetry packet: POST /telemetry
  */
 export async function submitTelemetry(telemetryData) {
-  return request('/telemetry', {
-    method: 'POST',
-    body: JSON.stringify(telemetryData)
-  });
+  if (activeMode === 'live') {
+    try {
+      return await request('/telemetry', {
+        method: 'POST',
+        body: JSON.stringify(telemetryData)
+      });
+    } catch (err) {
+      console.warn('Backend /telemetry unreachable, using local engine:', err.message);
+      activeMode = 'standalone';
+    }
+  }
+  return mockSubmitTelemetry(telemetryData);
 }
 
-export { API_BASE_URL };
+/**
+ * Upload and analyze CSV file: POST /analyze-csv (up to 5 MB)
+ */
+export async function uploadCsvTelemetry(file) {
+  if (!file) {
+    throw new Error('Please select a CSV file to upload.');
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('CSV file exceeds maximum allowed size of 5 MB.');
+  }
+
+  if (!file.name || !file.name.toLowerCase().endsWith('.csv')) {
+    throw new Error('Please upload a file with .csv extension.');
+  }
+
+  if (activeMode === 'live') {
+    try {
+      const baseUrl = getApiBaseUrl();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s for up to 5MB
+
+      const response = await fetch(`${baseUrl}/analyze-csv`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let detail = `HTTP ${response.status} ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson.detail) {
+            detail = typeof errJson.detail === 'string' ? errJson.detail : (errJson.detail.message || JSON.stringify(errJson.detail));
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(detail);
+      }
+
+      return await response.json();
+    } catch (err) {
+      console.warn('Backend /analyze-csv unreachable or error, falling back to local engine:', err.message);
+      // If network error, fall back to mock
+      if (err.name === 'TypeError' || err.name === 'AbortError' || err.message.includes('fetch')) {
+        activeMode = 'standalone';
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  return await mockAnalyzeCsv(file);
+}
+
+export const API_BASE_URL = getApiBaseUrl();

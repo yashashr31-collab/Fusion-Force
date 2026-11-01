@@ -7,7 +7,11 @@ import {
   CheckCircle2,
   Filter,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Zap,
+  Info,
+  UploadCloud
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -24,6 +28,7 @@ import {
 } from 'recharts';
 import { useSecurity } from '../context/SecurityContext';
 import PacketModal from '../components/PacketModal';
+import CsvUploadModal from '../components/CsvUploadModal';
 import { formatTimestamp } from '../utils/formatters';
 
 export default function LiveTelemetryView() {
@@ -38,13 +43,14 @@ export default function LiveTelemetryView() {
   const [activeChartTab, setActiveChartTab] = useState('all'); // 'all' | 'signal' | 'latency' | 'loss'
   const [filterAnomaliesOnly, setFilterAnomaliesOnly] = useState(false);
   const [inspectPacket, setInspectPacket] = useState(null);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
 
   // Custom Packet Injection Form State
   const [customSource, setCustomSource] = useState('sensor-01');
   const [customSeq, setCustomSeq] = useState('');
-  const [customSignal, setCustomSignal] = useState('-55.0');
-  const [customLatency, setCustomLatency] = useState('42.0');
-  const [customLoss, setCustomLoss] = useState('1.5');
+  const [customSignal, setCustomSignal] = useState('-47.4');
+  const [customLatency, setCustomLatency] = useState('46.5');
+  const [customLoss, setCustomLoss] = useState('0.7');
   const [customTimestampType, setCustomTimestampType] = useState('now'); // 'now' | 'future' | 'past'
   const [injectionResult, setInjectionResult] = useState(null);
 
@@ -64,33 +70,33 @@ export default function LiveTelemetryView() {
   const applyPreset = (presetType) => {
     switch (presetType) {
       case 'nominal':
-        setCustomSignal('-55.0');
-        setCustomLatency('40.0');
-        setCustomLoss('1.0');
+        setCustomSignal('-47.4');
+        setCustomLatency('46.5');
+        setCustomLoss('0.7');
         setCustomTimestampType('now');
         break;
       case 'jump':
-        setCustomSignal('-95.0'); // Sudden drop
-        setCustomLatency('45.0');
+        setCustomSignal('-92.0'); // Sudden drop
+        setCustomLatency('50.0');
         setCustomLoss('2.0');
         setCustomTimestampType('now');
         break;
       case 'future_ts':
-        setCustomSignal('-54.0');
-        setCustomLatency('38.0');
+        setCustomSignal('-46.0');
+        setCustomLatency('42.0');
         setCustomLoss('0.5');
         setCustomTimestampType('future');
         break;
       case 'past_ts':
-        setCustomSignal('-54.0');
-        setCustomLatency('38.0');
+        setCustomSignal('-48.0');
+        setCustomLatency('44.0');
         setCustomLoss('0.5');
         setCustomTimestampType('past');
         break;
       case 'extreme_latency':
-        setCustomSignal('-56.0');
-        setCustomLatency('500.0');
-        setCustomLoss('30.0');
+        setCustomSignal('-55.0');
+        setCustomLatency('450.0');
+        setCustomLoss('25.0');
         setCustomTimestampType('now');
         break;
       default:
@@ -105,10 +111,8 @@ export default function LiveTelemetryView() {
     let ts;
     const now = new Date();
     if (customTimestampType === 'future') {
-      // 120 seconds in future
       ts = new Date(now.getTime() + 120 * 1000).toISOString();
     } else if (customTimestampType === 'past') {
-      // 5 minutes in past
       ts = new Date(now.getTime() - 300 * 1000).toISOString();
     } else {
       ts = now.toISOString();
@@ -118,9 +122,9 @@ export default function LiveTelemetryView() {
       source: customSource || 'sensor-01',
       timestamp: ts,
       metrics: {
-        signal_strength: parseFloat(customSignal) || -55.0,
-        latency_ms: parseFloat(customLatency) || 40.0,
-        packet_loss: parseFloat(customLoss) || 0.0
+        signal_strength: parseFloat(customSignal) || -47.4,
+        latency_ms: parseFloat(customLatency) || 46.5,
+        packet_loss: parseFloat(customLoss) || 0.7
       }
     };
 
@@ -147,16 +151,34 @@ export default function LiveTelemetryView() {
     : chartData;
 
   return (
-    <div className="view-container live-telemetry-view">
+    <div className="view-container live-telemetry-view animate-fade-in">
       {/* Header */}
       <div className="view-header">
         <div>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-teal)' }} />
+              <span className="soc-status-text">CARRIER: RF-BAND-7 [UHF]</span>
+            </span>
+            <span className="synthetic-badge-pill" style={{ marginLeft: 8 }}>
+              <Info size={11} />
+              <span>LIVE TELEMETRY FEED</span>
+            </span>
+          </div>
           <h2 className="view-title">Live RF Signal Telemetry Analysis</h2>
           <p className="view-subtitle">
-            Inspect real-time signal properties, frequency strength, latency, and packet sequence continuity.
+            Inspect real-time signal properties, carrier power, latency, and packet sequence continuity.
           </p>
         </div>
-        <div className="view-header-actions">
+        <div className="view-header-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-cyber"
+            onClick={() => setCsvModalOpen(true)}
+            title="Batch upload & verify telemetry CSV file (up to 5 MB)"
+          >
+            <UploadCloud size={14} />
+            <span>Upload Telemetry CSV</span>
+          </button>
           <button
             className="btn btn-outline"
             onClick={() => triggerSimulation('normal')}
@@ -214,7 +236,7 @@ export default function LiveTelemetryView() {
           {chartData.length === 0 ? (
             <div className="empty-chart-state">
               <Radio size={40} className="text-muted" />
-              <p>No telemetry frames currently in memory.</p>
+              <p className="font-semibold text-primary">No telemetry frames currently in memory.</p>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={() => triggerSimulation('normal')}
@@ -229,17 +251,17 @@ export default function LiveTelemetryView() {
                 {activeChartTab === 'loss' ? (
                   <BarChart data={chartData} margin={{ top: 10, right: 15, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                    <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#64748b" tick={{ fontSize: 11 }} domain={[0, 100]} />
+                    <XAxis dataKey="name" stroke="#64748B" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#64748B" tick={{ fontSize: 11 }} domain={[0, 100]} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'var(--bg-card)',
-                        borderColor: 'var(--border-card)',
+                        borderColor: 'var(--border-card-hover)',
                         borderRadius: '8px',
                         fontSize: '12px'
                       }}
                     />
-                    <ReferenceLine y={20} stroke="var(--color-rose)" strokeDasharray="4 4" label={{ value: 'Loss Alarm 20%', fill: '#f43f5e', fontSize: 10 }} />
+                    <ReferenceLine y={20} stroke="var(--color-rose)" strokeDasharray="4 4" label={{ value: 'Loss Alarm 20%', fill: '#FF4560', fontSize: 10 }} />
                     <Bar dataKey="loss" name="Packet Loss (%)" fill="var(--color-rose)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 ) : (
@@ -259,12 +281,12 @@ export default function LiveTelemetryView() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                    <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
+                    <XAxis dataKey="name" stroke="#64748B" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#64748B" tick={{ fontSize: 11 }} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'var(--bg-card)',
-                        borderColor: 'var(--border-card)',
+                        borderColor: 'var(--border-card-hover)',
                         borderRadius: '8px',
                         fontSize: '12px'
                       }}
@@ -318,7 +340,7 @@ export default function LiveTelemetryView() {
 
       {/* Dual Section: Manual Telemetry Injection + Live Packet Inspector Feed */}
       <div className="telemetry-split-grid">
-        {/* Manual Telemetry Injection form */}
+        {/* Manual Telemetry Injection Form */}
         <div className="cyber-card manual-injection-card">
           <div className="cyber-card-header">
             <div className="chart-header-left">
@@ -345,8 +367,8 @@ export default function LiveTelemetryView() {
                 <button type="button" className="btn btn-outline btn-xs text-rose" onClick={() => applyPreset('future_ts')}>
                   Future Clock
                 </button>
-                <button type="button" className="btn btn-outline btn-xs text-pink" onClick={() => applyPreset('past_ts')}>
-                  Time Reversal
+                <button type="button" className="btn btn-outline btn-xs text-purple" onClick={() => applyPreset('past_ts')}>
+                  Time Rollback
                 </button>
                 <button type="button" className="btn btn-outline btn-xs text-rose" onClick={() => applyPreset('extreme_latency')}>
                   Congestion Spike
@@ -464,7 +486,7 @@ export default function LiveTelemetryView() {
                       <span className="mono font-semibold">
                         STATUS: {injectionResult.data.status?.toUpperCase()}
                       </span>
-                      <span className={`badge ${injectionResult.data.alerts?.length > 0 ? 'badge-rose' : 'badge-emerald'}`}>
+                      <span className={`badge ${injectionResult.data.alerts?.length > 0 ? 'badge-rose' : 'badge-teal'}`}>
                         {injectionResult.data.alert_count} Alerts Triggered
                       </span>
                     </div>
@@ -479,7 +501,7 @@ export default function LiveTelemetryView() {
                       </div>
                     ) : (
                       <div className="result-clean-msg">
-                        <CheckCircle2 size={14} className="text-emerald" />
+                        <CheckCircle2 size={14} className="text-teal" />
                         <span>Packet verified cleanly by GhostWave detector. Zero anomalies observed.</span>
                       </div>
                     )}
@@ -551,12 +573,12 @@ export default function LiveTelemetryView() {
                         </span>
                       </td>
                       <td className="mono">
-                        <span className={p.latency > 100 ? 'text-rose font-semibold' : ''}>
+                        <span className={p.latency > 80 ? 'text-rose font-semibold' : ''}>
                           {p.latency !== null ? `${p.latency} ms` : 'N/A'}
                         </span>
                       </td>
                       <td className="mono">
-                        <span className={p.loss > 10 ? 'text-rose font-semibold' : ''}>
+                        <span className={p.loss > 5 ? 'text-rose font-semibold' : ''}>
                           {p.loss !== null ? `${p.loss}%` : 'N/A'}
                         </span>
                       </td>
@@ -566,7 +588,7 @@ export default function LiveTelemetryView() {
                             {p.alertCount} Flag{p.alertCount > 1 ? 's' : ''}
                           </span>
                         ) : (
-                          <span className="badge badge-emerald">Verified</span>
+                          <span className="badge badge-teal">Verified</span>
                         )}
                       </td>
                       <td>
@@ -593,6 +615,12 @@ export default function LiveTelemetryView() {
         item={inspectPacket}
         onClose={() => setInspectPacket(null)}
         title="Telemetry Frame Inspector"
+      />
+
+      {/* Batch Telemetry CSV Upload Modal */}
+      <CsvUploadModal
+        isOpen={csvModalOpen}
+        onClose={() => setCsvModalOpen(false)}
       />
     </div>
   );

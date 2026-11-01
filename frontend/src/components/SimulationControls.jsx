@@ -9,7 +9,9 @@ import {
   Sparkles,
   CheckCircle2,
   AlertOctagon,
-  Info
+  Info,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 import { VALID_SCENARIOS, SCENARIO_METADATA } from '../services/api';
@@ -29,23 +31,23 @@ export default function SimulationControls() {
       const res = await triggerSimulation(target);
       setFeedbackMsg({
         type: 'success',
-        text: `Scenario "${target}" completed: ${res.packets_processed} packets processed, ${res.alerts_detected} anomalies detected.`
+        text: `Scenario "${target}" executed successfully: ${res.packets_processed} frames processed, ${res.alerts_detected} anomalies detected and logged.`
       });
     } catch (err) {
       setFeedbackMsg({
         type: 'error',
-        text: `Simulation failed: ${err.message}`
+        text: `Simulation execution failed: ${err.message}`
       });
     }
   };
 
   const getScenarioIcon = (iconName) => {
     switch (iconName) {
-      case 'Flame': return <Flame size={16} />;
-      case 'WifiOff': return <WifiOff size={16} />;
-      case 'Copy': return <Copy size={16} />;
-      case 'AlertTriangle': return <AlertTriangle size={16} />;
-      default: return <Radio size={16} />;
+      case 'Flame': return <Flame size={15} />;
+      case 'WifiOff': return <WifiOff size={15} />;
+      case 'Copy': return <Copy size={15} />;
+      case 'AlertTriangle': return <AlertTriangle size={15} />;
+      default: return <Radio size={15} />;
     }
   };
 
@@ -64,18 +66,23 @@ export default function SimulationControls() {
           </div>
         </div>
 
-        {/* Clear label for synthetic demonstration data */}
-        <div className="synthetic-badge-pill" title="Backend requirement: clearly labeled synthetic demonstration data">
-          <Info size={12} />
+        {/* Mandatory Visible Synthetic Data Notice */}
+        <div className="synthetic-badge-pill" title="Adversarial evaluation requirement: clearly distinguish synthetic demonstration data">
+          <Info size={13} />
           <span>SYNTHETIC DEMONSTRATION DATA</span>
         </div>
       </div>
 
       <div className="cyber-card-body simulation-body">
-        {/* Scenario Selector Grid */}
+        {/* Scenario Selection Grid */}
         <div className="scenario-cards-grid">
           {VALID_SCENARIOS.map((scKey) => {
-            const meta = SCENARIO_METADATA[scKey];
+            const meta = SCENARIO_METADATA[scKey] || {
+              label: scKey,
+              risk: 'Medium',
+              color: '#38bdf8',
+              description: 'Synthetic scenario injection'
+            };
             const isSelected = selectedScenario === scKey;
             const isActiveRunning = activeScenario === scKey && isSimulating;
 
@@ -97,8 +104,8 @@ export default function SimulationControls() {
                     className="scenario-risk-pill"
                     style={{
                       color: meta.color,
-                      borderColor: `${meta.color}44`,
-                      background: `${meta.color}15`
+                      borderColor: `${meta.color}45`,
+                      backgroundColor: `${meta.color}15`
                     }}
                   >
                     {meta.risk} Risk
@@ -119,7 +126,7 @@ export default function SimulationControls() {
                     disabled={isSimulating || !isOnline}
                   >
                     <Play size={12} className={isActiveRunning ? 'animate-spin' : ''} />
-                    <span>{isActiveRunning ? 'Injecting...' : `Simulate ${meta.label}`}</span>
+                    <span>{isActiveRunning ? 'Injecting Telemetry...' : `Inject ${meta.label}`}</span>
                   </button>
                 </div>
               </div>
@@ -135,33 +142,37 @@ export default function SimulationControls() {
           </div>
         )}
 
-        {/* Last Simulation Stats Bar */}
+        {/* Simulation Results & Attack Detection Response Bar */}
         {simulationResult && (
           <div className="sim-stats-bar">
             <div className="sim-stat-item">
-              <span className="sim-stat-label">Last Scenario Executed</span>
-              <span className="sim-stat-val mono text-cyan">{simulationResult.scenario?.toUpperCase()}</span>
-            </div>
-            <div className="sim-stat-divider" />
-            <div className="sim-stat-item">
-              <span className="sim-stat-label">Packets Processed</span>
-              <span className="sim-stat-val mono">{simulationResult.packets_processed} frames</span>
-            </div>
-            <div className="sim-stat-divider" />
-            <div className="sim-stat-item">
-              <span className="sim-stat-label">Anomalies Detected</span>
-              <span className={`sim-stat-val mono ${simulationResult.alerts_detected > 0 ? 'text-rose' : 'text-emerald'}`}>
-                {simulationResult.alerts_detected} alerts
+              <span className="sim-stat-label">Injected Scenario</span>
+              <span className="sim-stat-val mono text-cyan font-bold">
+                {simulationResult.scenario?.toUpperCase()}
               </span>
             </div>
             <div className="sim-stat-divider" />
             <div className="sim-stat-item">
-              <span className="sim-stat-label">Detection Status</span>
+              <span className="sim-stat-label">Frames Processed</span>
+              <span className="sim-stat-val mono">
+                {simulationResult.packets_processed} packets
+              </span>
+            </div>
+            <div className="sim-stat-divider" />
+            <div className="sim-stat-item">
+              <span className="sim-stat-label">Detection Response</span>
+              <span className={`sim-stat-val mono ${simulationResult.alerts_detected > 0 ? 'text-rose' : 'text-teal'}`}>
+                {simulationResult.alerts_detected > 0 ? `${simulationResult.alerts_detected} Threats Flagged` : '0 Anomalies (Clean)'}
+              </span>
+            </div>
+            <div className="sim-stat-divider" />
+            <div className="sim-stat-item">
+              <span className="sim-stat-label">Verification Verdict</span>
               <span className="sim-stat-val">
                 {simulationResult.alerts_detected > 0 ? (
-                  <span className="badge badge-rose">Flagged &amp; Logged</span>
+                  <span className="badge badge-rose">Adversarial Triggered</span>
                 ) : (
-                  <span className="badge badge-emerald">Nominal Baseline</span>
+                  <span className="badge badge-teal">Nominal Verification</span>
                 )}
               </span>
             </div>

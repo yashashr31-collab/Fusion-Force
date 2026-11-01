@@ -7,7 +7,8 @@ import {
   BarChart3,
   Radio,
   Cpu,
-  ChevronRight
+  ChevronRight,
+  Wifi
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 
@@ -27,7 +28,8 @@ export default function Sidebar({ currentView, onNavigate, mobileOpen, onCloseMo
       label: 'Live Telemetry',
       icon: Activity,
       badge: isOnline ? 'LIVE' : null,
-      badgeColor: 'badge-emerald',
+      badgeColor: 'badge-teal',
+      badgePulse: true,
       description: 'RF stream & manual injection'
     },
     {
@@ -94,7 +96,8 @@ export default function Sidebar({ currentView, onNavigate, mobileOpen, onCloseMo
                   <span className="nav-item-desc">{item.description}</span>
                 </div>
                 {item.badge !== null && (
-                  <span className={`badge ${item.badgeColor || 'badge-cyan'} nav-badge`}>
+                  <span className={`badge ${item.badgeColor || 'badge-cyan'} nav-badge ${item.badgePulse ? 'badge-pulse-glow' : ''}`}>
+                    {item.badgePulse && <span className="nav-badge-dot" />}
                     {item.badge}
                   </span>
                 )}
@@ -104,24 +107,32 @@ export default function Sidebar({ currentView, onNavigate, mobileOpen, onCloseMo
           })}
         </nav>
 
-        {/* Telemetry Sensor Node Info */}
+        {/* Active Sensor Node Info Panel with Animated Signal Indicator */}
         <div className="sidebar-sensor-card">
           <div className="sensor-card-header">
-            <Radio size={14} className="sensor-icon" />
-            <span className="sensor-title">ACTIVE SENSOR NODE</span>
+            <div className="sensor-title-row">
+              <Radio size={14} className="sensor-icon text-cyan" />
+              <span className="sensor-title">ACTIVE SENSOR NODE</span>
+            </div>
+            {/* Animated signal transmission indicator */}
+            <div className="sensor-signal-wave" title="Real-time RF Carrier Signal Active">
+              <span className="wave-bar wave-1" />
+              <span className="wave-bar wave-2" />
+              <span className="wave-bar wave-3" />
+            </div>
           </div>
           <div className="sensor-details">
             <div className="sensor-row">
               <span className="sensor-key">Node ID:</span>
-              <span className="sensor-val mono">sensor-01</span>
+              <span className="sensor-val mono text-primary">sensor-01</span>
             </div>
             <div className="sensor-row">
               <span className="sensor-key">Channel:</span>
-              <span className="sensor-val mono">RF-BAND-7 [UHF]</span>
+              <span className="sensor-val mono text-primary">RF-BAND-7 [UHF]</span>
             </div>
             <div className="sensor-row">
               <span className="sensor-key">Integrity Mode:</span>
-              <span className="sensor-val text-cyan">Adversarial Monitored</span>
+              <span className="sensor-val text-cyan font-semibold">Adversarial Monitored</span>
             </div>
           </div>
         </div>
@@ -129,7 +140,7 @@ export default function Sidebar({ currentView, onNavigate, mobileOpen, onCloseMo
         {/* System Footer info */}
         <div className="sidebar-footer">
           <div className="footer-tag-row">
-            <Cpu size={12} />
+            <Cpu size={12} className="text-cyan" />
             <span>GhostWave Engine v1.0.0</span>
           </div>
           <div className="footer-subtext">

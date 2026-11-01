@@ -3,7 +3,11 @@ import {
   Clock,
   FileJson,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Radio,
+  Wifi,
+  Activity,
+  ShieldAlert
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 import PacketModal from '../components/PacketModal';
@@ -17,10 +21,16 @@ export default function IncidentTimelineView() {
   const displayedIncidents = incidents.slice(0, timelineLimit);
 
   return (
-    <div className="view-container incident-timeline-view">
+    <div className="view-container incident-timeline-view animate-fade-in">
       {/* Header */}
       <div className="view-header">
         <div>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-cyan)' }} />
+              <span className="soc-status-text">TEMPORAL RECONSTRUCTION LOG</span>
+            </span>
+          </div>
           <h2 className="view-title">Incident Chronology &amp; Timeline</h2>
           <p className="view-subtitle">
             Temporal security event reconstruction showing telemetry anomaly arrival progression.
@@ -79,10 +89,10 @@ export default function IncidentTimelineView() {
         <div className="cyber-card-body timeline-body">
           {displayedIncidents.length === 0 ? (
             <div className="empty-timeline-state">
-              <CheckCircle2 size={40} className="text-emerald" />
+              <CheckCircle2 size={40} className="text-teal" />
               <p className="font-semibold text-lg text-primary">No Incidents Logged</p>
               <p className="text-sm text-muted">
-                The incident timeline is clean. Trigger an adversarial simulation to generate an event trace.
+                The incident timeline is clean. Trigger an adversarial simulation in Overview to observe real-time incident sequencing.
               </p>
             </div>
           ) : (

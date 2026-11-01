@@ -8,13 +8,17 @@ import SecurityAlertsView from './views/SecurityAlertsView';
 import IncidentTimelineView from './views/IncidentTimelineView';
 import AuditLogsView from './views/AuditLogsView';
 import EvaluationView from './views/EvaluationView';
-import { Menu, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import ApiSettingsModal from './components/ApiSettingsModal';
+import { Menu, X, Cpu, Settings2, Sparkles } from 'lucide-react';
 import './App.css';
 
 function DashboardContent() {
   const [currentView, setCurrentView] = useState('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isOnline, backendStatus, apiBaseUrl, checkHealth, loading } = useSecurity();
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [apiModalOpen, setApiModalOpen] = useState(false);
+
+  const { isLiveBackend } = useSecurity();
 
   const renderView = () => {
     switch (currentView) {
@@ -65,35 +69,52 @@ function DashboardContent() {
 
         {/* Main Content Area */}
         <main className="ghostwave-main-viewport">
-          {/* Backend Offline Warning Banner if disconnected */}
-          {!isOnline && backendStatus === 'offline' && (
-            <div className="backend-offline-banner">
-              <div className="offline-banner-left">
-                <AlertTriangle size={20} className="text-rose" />
+          {/* Informative Standalone Demo Banner when running without external FastAPI backend */}
+          {!isLiveBackend && !bannerDismissed && (
+            <div className="backend-demo-banner">
+              <div className="demo-banner-left">
+                <div className="demo-icon-box">
+                  <Cpu size={18} className="text-cyan animate-pulse" />
+                </div>
                 <div>
-                  <div className="offline-banner-title">
-                    Backend Connection Offline (<code className="mono">{apiBaseUrl}</code>)
+                  <div className="demo-banner-title">
+                    <span>Standalone In-Browser Engine Active</span>
+                    <span className="demo-pill-badge">
+                      <Sparkles size={10} style={{ display: 'inline', marginRight: 3 }} />
+                      Fully Interactive Demo
+                    </span>
                   </div>
-                  <div className="offline-banner-desc">
-                    Unable to query FastAPI endpoints. Ensure backend server is running:
-                    <span className="mono code-snippet">uvicorn main:app --reload --port 8000</span>
+                  <div className="demo-banner-desc">
+                    Running full client-side RF signal simulation, adversarial attack injections, and the GhostWave anomaly detection engine directly in your browser.
                   </div>
                 </div>
               </div>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={checkHealth}
-                disabled={loading.health}
-              >
-                <RefreshCw size={14} className={loading.health ? 'animate-spin' : ''} />
-                <span>Retry Connection</span>
-              </button>
+              <div className="demo-banner-actions">
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setApiModalOpen(true)}
+                  title="Configure or connect an external FastAPI backend"
+                >
+                  <Settings2 size={13} />
+                  <span>Connect Backend</span>
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm demo-dismiss-btn"
+                  onClick={() => setBannerDismissed(true)}
+                  title="Dismiss notice"
+                  aria-label="Dismiss banner"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
           )}
 
           {renderView()}
         </main>
       </div>
+
+      <ApiSettingsModal isOpen={apiModalOpen} onClose={() => setApiModalOpen(false)} />
     </div>
   );
 }

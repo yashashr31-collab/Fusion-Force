@@ -4,7 +4,10 @@ import {
   Info,
   RefreshCw,
   Check,
-  X
+  X,
+  Target,
+  ShieldCheck,
+  Layers
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,6 +29,24 @@ export default function EvaluationView() {
   const scenariosData = evaluation?.scenarios || {};
   const scenarioKeys = Object.keys(scenariosData);
 
+  // Summary Metrics across all scenarios
+  let totalPackets = 0;
+  let totalAlerts = 0;
+  let totalMatched = 0;
+  let totalExpected = 0;
+
+  scenarioKeys.forEach(k => {
+    const sc = scenariosData[k];
+    totalPackets += sc.packets_processed || 0;
+    totalAlerts += sc.alerts_count || 0;
+    const exp = sc.expected_indicators || [];
+    const mat = sc.expected_indicator_observed || [];
+    totalExpected += exp.length;
+    totalMatched += mat.length;
+  });
+
+  const overallAccuracy = totalExpected > 0 ? Math.round((totalMatched / totalExpected) * 100) : 100;
+
   // Chart data
   const chartData = scenarioKeys.map((scKey) => {
     const sc = scenariosData[scKey];
@@ -39,10 +60,16 @@ export default function EvaluationView() {
   });
 
   return (
-    <div className="view-container evaluation-view">
+    <div className="view-container evaluation-view animate-fade-in">
       {/* Header */}
       <div className="view-header">
         <div>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-purple)' }} />
+              <span className="soc-status-text">SYNTHETIC BENCHMARK HARNESS</span>
+            </span>
+          </div>
           <h2 className="view-title">Adversarial Detection Engine Evaluation</h2>
           <p className="view-subtitle">
             Benchmark performance results returned directly from backend <code className="mono">GET /evaluate</code>.
@@ -75,6 +102,30 @@ export default function EvaluationView() {
         </div>
       </div>
 
+      {/* High-level Benchmark Metric Cards */}
+      <div className="alerts-stats-row" style={{ marginBottom: 24 }}>
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-cyan)' }}>
+          <span className="stat-label">Total Test Packets</span>
+          <span className="stat-val mono text-cyan">{totalPackets}</span>
+          <span className="stat-sub">Across 5 Synthetic Suites</span>
+        </div>
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-teal)' }}>
+          <span className="stat-label">Expected Indicators Matched</span>
+          <span className="stat-val mono text-teal">{totalMatched} / {totalExpected}</span>
+          <span className="stat-sub">{overallAccuracy}% Signature Recall Rate</span>
+        </div>
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-rose)' }}>
+          <span className="stat-label">Total Alerts Flagged</span>
+          <span className="stat-val mono text-rose">{totalAlerts}</span>
+          <span className="stat-sub">Adversarial Detections</span>
+        </div>
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-purple)' }}>
+          <span className="stat-label">Test Scenarios</span>
+          <span className="stat-val mono text-purple">{scenarioKeys.length}</span>
+          <span className="stat-sub">Standardized Attack Vectors</span>
+        </div>
+      </div>
+
       {/* Comparative Evaluation Bar Chart */}
       {chartData.length > 0 && (
         <div className="cyber-card eval-chart-card">
@@ -96,12 +147,12 @@ export default function EvaluationView() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 15, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                  <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="name" stroke="#64748B" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#64748B" tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'var(--bg-card)',
-                      borderColor: 'var(--border-card)',
+                      borderColor: 'var(--border-card-hover)',
                       borderRadius: '8px',
                       fontSize: '12px'
                     }}
@@ -121,7 +172,7 @@ export default function EvaluationView() {
         {scenarioKeys.length === 0 ? (
           <div className="empty-eval-box cyber-card">
             <Sparkles size={36} className="text-muted" />
-            <p>No evaluation report loaded yet.</p>
+            <p className="font-semibold text-primary">No evaluation report loaded yet.</p>
             <button
               className="btn btn-primary btn-sm"
               onClick={refreshEvaluation}
@@ -181,7 +232,7 @@ export default function EvaluationView() {
                     </div>
                     <div className="eval-metric-item">
                       <span className="eval-metric-lbl">Total Alerts</span>
-                      <span className={`eval-metric-val mono ${sc.alerts_count > 0 ? 'text-rose' : 'text-emerald'}`}>
+                      <span className={`eval-metric-val mono ${sc.alerts_count > 0 ? 'text-rose' : 'text-teal'}`}>
                         {sc.alerts_count}
                       </span>
                     </div>
@@ -210,7 +261,7 @@ export default function EvaluationView() {
                                 key={ind}
                                 className={`indicator-tag mono ${isObserved ? 'tag-matched' : 'tag-missing'}`}
                               >
-                                {isObserved ? <Check size={11} className="text-emerald" /> : <X size={11} className="text-rose" />}
+                                {isObserved ? <Check size={11} className="text-teal" /> : <X size={11} className="text-rose" />}
                                 <span>{ind}</span>
                               </span>
                             );

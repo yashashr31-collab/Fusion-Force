@@ -7,17 +7,23 @@ import {
   fetchEvaluation,
   runSimulation,
   submitTelemetry,
-  API_BASE_URL
+  uploadCsvTelemetry,
+  getApiBaseUrl,
+  setApiBaseUrl,
+  getEngineMode
 } from '../services/api';
 
 const SecurityContext = createContext(null);
 
 export function SecurityProvider({ children }) {
-  // Backend Connection State
-  const [isOnline, setIsOnline] = useState(false);
+  // Backend & Engine State
+  const [isOnline, setIsOnline] = useState(true);
+  const [isLiveBackend, setIsLiveBackend] = useState(false);
+  const [engineMode, setEngineMode] = useState('standalone'); // 'live' | 'standalone'
   const [backendStatus, setBackendStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
   const [backendError, setBackendError] = useState(null);
   const [lastCheckTime, setLastCheckTime] = useState(null);
+  const [apiUrl, setApiUrl] = useState(getApiBaseUrl());
 
   // Security Data
   const [incidents, setIncidents] = useState([]);
@@ -38,7 +44,8 @@ export function SecurityProvider({ children }) {
     audit: false,
     evaluation: false,
     simulation: false,
-    telemetrySubmit: false
+    telemetrySubmit: false,
+    csvUpload: false
   });
 
   // Polling Settings
@@ -58,20 +65,40 @@ export function SecurityProvider({ children }) {
         setIsOnline(true);
         setBackendStatus('online');
         setBackendError(null);
+        const mode = res.mode || getEngineMode();
+        setEngineMode(mode);
+        setIsLiveBackend(mode === 'live');
       } else {
-        setIsOnline(false);
-        setBackendStatus('offline');
-        setBackendError('Unexpected response from /health');
+        setIsOnline(true);
+        setIsLiveBackend(false);
+        setEngineMode('standalone');
+        setBackendStatus('online');
       }
     } catch (err) {
-      setIsOnline(false);
-      setBackendStatus('offline');
-      setBackendError(err.message || 'Unable to connect to backend server');
+      setIsOnline(true);
+      setIsLiveBackend(false);
+      setEngineMode('standalone');
+      setBackendStatus('online');
+      setBackendError(err.message || null);
     } finally {
       setLastCheckTime(new Date());
       setLoading(prev => ({ ...prev, health: false }));
     }
   }, []);
+
+  /**
+   * Update Custom API Base URL
+   */
+  const updateApiBaseUrl = useCallback(async (newUrl) => {
+    setApiBaseUrl(newUrl);
+    setApiUrl(getApiBaseUrl());
+    await checkHealth();
+    await Promise.allSettled([
+      refreshIncidents(),
+      refreshAuditLogs(),
+      refreshEvaluation()
+    ]);
+  }, [checkHealth]);
 
   /**
    * Fetch Incidents: GET /incidents
@@ -225,32 +252,77 @@ export function SecurityProvider({ children }) {
     }
   }, [telemetrySeries, refreshIncidents, refreshAuditLogs]);
 
-  // Initial load: check health and populate initial data
+  /**
+   * Batch Upload & Analyze CSV File (up to 5 MB): POST /analyze-csv
+   */
+  const uploadCsvFile = useCallback(async (file) => {
+    setLoading(prev => ({ ...prev, csvUpload: true }));
+    try {
+      const response = await uploadCsvTelemetry(file);
+
+      // If results returned, update telemetrySeries preview for live visual feedback
+      if (response && Array.isArray(response.results) && response.results.length > 0) {
+        const previewRows = response.results.slice(-30).map((r, idx) => {
+          const pkt = r.packet || {};
+          const metrics = pkt.metrics || {};
+          return {
+            index: idx + 1,
+            sequence: r.sequence !== undefined ? r.sequence : (pkt.sequence !== undefined ? pkt.sequence : idx + 1),
+            timestamp: pkt.timestamp || new Date().toISOString(),
+            signal_strength: metrics.signal_strength !== undefined ? metrics.signal_strength : null,
+            latency_ms: metrics.latency_ms !== undefined ? metrics.latency_ms : null,
+            packet_loss: metrics.packet_loss !== undefined ? metrics.packet_loss : null,
+            alerts: r.alerts || [],
+            alertCount: r.alert_count || (r.alerts ? r.alerts.length : 0),
+            hasAnomaly: (r.alert_count > 0 || (r.alerts && r.alerts.length > 0)),
+            source: r.source || pkt.source || 'CSV Upload'
+          };
+        });
+
+        if (previewRows.length > 0) {
+          setTelemetrySeries(previewRows);
+          const lastItem = previewRows[previewRows.length - 1];
+          setLatestPacket(lastItem);
+          setLatestAlerts(lastItem.alerts || []);
+        }
+      }
+
+      // Refresh incidents and audit logs
+      await Promise.allSettled([
+        refreshIncidents(),
+        refreshAuditLogs()
+      ]);
+
+      return response;
+    } catch (err) {
+      console.error('CSV upload analysis error:', err);
+      throw err;
+    } finally {
+      setLoading(prev => ({ ...prev, csvUpload: false }));
+    }
+  }, [refreshIncidents, refreshAuditLogs]);
+
+  // Initial load: check health, seed baseline, populate data
   useEffect(() => {
     let isMounted = true;
     (async () => {
       await checkHealth();
       if (isMounted) {
-        refreshIncidents();
-        refreshAuditLogs();
-        refreshEvaluation();
+        await Promise.allSettled([
+          refreshIncidents(),
+          refreshAuditLogs(),
+          refreshEvaluation()
+        ]);
+        if (!hasInitializedBaselineRef.current) {
+          hasInitializedBaselineRef.current = true;
+          triggerSimulation('normal').catch(() => {});
+        }
       }
     })();
     return () => {
       isMounted = false;
     };
-  }, [checkHealth, refreshIncidents, refreshAuditLogs, refreshEvaluation]);
-
-  // If backend is online, seed initial baseline once
-  useEffect(() => {
-    if (isOnline && !hasInitializedBaselineRef.current) {
-      hasInitializedBaselineRef.current = true;
-      const timer = setTimeout(() => {
-        triggerSimulation('normal').catch(() => {});
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isOnline, triggerSimulation]);
+  }, [checkHealth, refreshIncidents, refreshAuditLogs, refreshEvaluation, triggerSimulation]);
 
   // Auto-refresh interval
   useEffect(() => {
@@ -269,12 +341,15 @@ export function SecurityProvider({ children }) {
   }, [autoRefresh, pollIntervalSeconds, refreshAll]);
 
   const value = {
-    // Connection
+    // Connection & Engine
     isOnline,
+    isLiveBackend,
+    engineMode,
     backendStatus,
     backendError,
     lastCheckTime,
-    apiBaseUrl: API_BASE_URL,
+    apiBaseUrl: apiUrl,
+    updateApiBaseUrl,
     checkHealth,
 
     // Data
@@ -295,6 +370,7 @@ export function SecurityProvider({ children }) {
     refreshEvaluation,
     triggerSimulation,
     submitCustomPacket,
+    uploadCsvFile,
 
     // Polling settings
     autoRefresh,

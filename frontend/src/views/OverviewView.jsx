@@ -6,7 +6,11 @@ import {
   ArrowRight,
   Clock,
   CheckCircle2,
-  Layers
+  Layers,
+  Server,
+  Cpu,
+  Wifi,
+  UploadCloud
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -22,15 +26,19 @@ import { useSecurity } from '../context/SecurityContext';
 import MetricCards from '../components/MetricCards';
 import SimulationControls from '../components/SimulationControls';
 import PacketModal from '../components/PacketModal';
+import CsvUploadModal from '../components/CsvUploadModal';
 import { getAlertMeta, getSeverityStyle, timeAgo } from '../utils/formatters';
 
 export default function OverviewView({ onNavigate }) {
   const {
     incidents,
-    telemetrySeries
+    telemetrySeries,
+    isLiveBackend,
+    isOnline
   } = useSecurity();
 
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
 
   // Latest 5 incidents
   const recentIncidents = incidents.slice(0, 5);
@@ -45,17 +53,40 @@ export default function OverviewView({ onNavigate }) {
     hasAnomaly: pt.hasAnomaly
   }));
 
+  const lastUpdated = new Date().toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
   return (
-    <div className="view-container overview-view">
+    <div className="view-container overview-view animate-fade-in">
       {/* Page Title & Status Banner */}
       <div className="view-header">
         <div>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: isOnline ? 'var(--color-teal)' : 'var(--color-rose)' }} />
+              <span className="soc-status-text">
+                {isLiveBackend ? 'RENDER SOC CLOUD LIVE' : 'CLIENT-SIDE SECURE ENGINE'}
+              </span>
+            </span>
+            <span className="last-sync-time mono text-muted text-xs">
+              <Clock size={11} style={{ display: 'inline', marginRight: 4 }} />
+              UTC Sync: {lastUpdated}
+            </span>
+          </div>
           <h2 className="view-title">Adversarial Telemetry Verification SOC</h2>
           <p className="view-subtitle">
             Continuous real-time verification and anomaly detection for mission-critical RF signal streams.
           </p>
         </div>
-        <div className="view-header-actions">
+        <div className="view-header-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn btn-outline" onClick={() => setCsvModalOpen(true)} title="Batch verify telemetry records from CSV (max 5 MB)">
+            <UploadCloud size={15} className="text-cyan" />
+            <span>Upload Telemetry CSV</span>
+          </button>
           <button className="btn btn-primary" onClick={() => onNavigate('telemetry')}>
             <Activity size={15} />
             <span>Open Telemetry Stream</span>
@@ -63,13 +94,13 @@ export default function OverviewView({ onNavigate }) {
         </div>
       </div>
 
-      {/* Metric Cards */}
+      {/* 5-Card Metric Row */}
       <MetricCards onCardClick={onNavigate} />
 
-      {/* Attack Simulation Controls */}
+      {/* Attack Simulation Engine Panel */}
       <SimulationControls />
 
-      {/* Grid: Live Telemetry Preview + Recent Incidents */}
+      {/* Grid: Live Telemetry Correlation + Recent Security Alerts */}
       <div className="overview-dual-grid">
         {/* Left: Telemetry Time-Series Preview */}
         <div className="cyber-card overview-chart-card">
@@ -97,8 +128,8 @@ export default function OverviewView({ onNavigate }) {
             {chartData.length === 0 ? (
               <div className="empty-chart-state">
                 <Activity size={32} className="text-muted" />
-                <p>No telemetry frames loaded yet.</p>
-                <span className="text-xs text-muted">Run a simulation scenario above to stream synthetic frames.</span>
+                <p className="font-semibold text-primary">No telemetry frames loaded yet.</p>
+                <span className="text-xs text-muted">Run a simulation scenario above or inject frames to populate live stream.</span>
               </div>
             ) : (
               <div style={{ width: '100%', height: 260 }}>
@@ -115,12 +146,12 @@ export default function OverviewView({ onNavigate }) {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
-                    <XAxis dataKey="name" stroke="#64748b" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
+                    <XAxis dataKey="name" stroke="#64748B" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#64748B" tick={{ fontSize: 11 }} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'var(--bg-card)',
-                        borderColor: 'var(--border-card)',
+                        borderColor: 'var(--border-card-hover)',
                         borderRadius: '8px',
                         boxShadow: 'var(--shadow-card)',
                         fontSize: '12px'
@@ -128,7 +159,7 @@ export default function OverviewView({ onNavigate }) {
                       itemStyle={{ color: 'var(--text-primary)' }}
                       labelStyle={{ color: 'var(--color-cyan)', fontWeight: 600 }}
                     />
-                    <ReferenceLine y={-80} stroke="var(--color-rose)" strokeDasharray="4 4" label={{ value: 'Jamming Threshold', fill: '#f43f5e', fontSize: 10 }} />
+                    <ReferenceLine y={-80} stroke="var(--color-rose)" strokeDasharray="4 4" label={{ value: 'Jamming Threshold (-80 dBm)', fill: '#FF4560', fontSize: 10 }} />
                     <Area
                       type="monotone"
                       dataKey="signal"
@@ -155,7 +186,7 @@ export default function OverviewView({ onNavigate }) {
 
           <div className="card-footer-action">
             <span className="text-muted text-xs">
-              Showing last {chartData.length} monitored packets · <strong>Node: sensor-01</strong>
+              Tracking last {chartData.length} monitored packets · <strong>Node: sensor-01</strong>
             </span>
             <button className="btn btn-outline btn-xs" onClick={() => onNavigate('telemetry')}>
               <span>View Full Charts</span>
@@ -164,7 +195,7 @@ export default function OverviewView({ onNavigate }) {
           </div>
         </div>
 
-        {/* Right: Recent Security Alerts / Incidents Snapshot */}
+        {/* Right: Recent Security Alerts Snapshot */}
         <div className="cyber-card overview-incidents-card">
           <div className="cyber-card-header">
             <div className="chart-header-left">
@@ -182,10 +213,10 @@ export default function OverviewView({ onNavigate }) {
           <div className="cyber-card-body incidents-snapshot-list">
             {recentIncidents.length === 0 ? (
               <div className="empty-incidents-box">
-                <CheckCircle2 size={32} className="text-emerald" />
+                <CheckCircle2 size={32} className="text-teal" />
                 <p className="empty-title">All Telemetry Clear</p>
                 <p className="empty-desc">
-                  No security incidents recorded. Run a simulation scenario like <em>Network Fault</em>, <em>Replay</em>, or <em>Manipulation</em> to observe real-time detection.
+                  No security incidents recorded. Run a simulation scenario like <em>Network Fault</em>, <em>Replay</em>, or <em>Signal Jump</em> to observe real-time detection.
                 </p>
               </div>
             ) : (
@@ -247,17 +278,17 @@ export default function OverviewView({ onNavigate }) {
         </div>
       </div>
 
-      {/* Architecture & Verification Engine Specs */}
+      {/* Architecture & Multi-Layer Defense Specs */}
       <div className="cyber-card specs-card">
         <div className="cyber-card-header">
           <div className="chart-header-left">
-            <Layers size={16} className="text-blue" />
+            <Layers size={16} className="text-cyan" />
             <div>
               <h3 className="card-heading">GhostWave Verification Architecture</h3>
               <span className="card-subheading">Multi-layer adversarial defense pipeline</span>
             </div>
           </div>
-          <span className="badge badge-emerald">ACTIVE DEFENSE</span>
+          <span className="badge badge-teal">ACTIVE DEFENSE</span>
         </div>
         <div className="cyber-card-body specs-grid">
           <div className="spec-col">
@@ -293,6 +324,12 @@ export default function OverviewView({ onNavigate }) {
         item={selectedIncident}
         onClose={() => setSelectedIncident(null)}
         title="Incident Packet Inspector"
+      />
+
+      {/* CSV Batch Telemetry Upload Modal */}
+      <CsvUploadModal
+        isOpen={csvModalOpen}
+        onClose={() => setCsvModalOpen(false)}
       />
     </div>
   );

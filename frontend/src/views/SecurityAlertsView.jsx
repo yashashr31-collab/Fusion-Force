@@ -4,7 +4,11 @@ import {
   Search,
   Eye,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Filter,
+  ShieldCheck,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { useSecurity } from '../context/SecurityContext';
 import PacketModal from '../components/PacketModal';
@@ -57,13 +61,19 @@ export default function SecurityAlertsView() {
   const mediumCount = incidents.filter(i => (i.severity || '').toLowerCase() === 'medium').length;
 
   return (
-    <div className="view-container security-alerts-view">
+    <div className="view-container security-alerts-view animate-fade-in">
       {/* View Header */}
       <div className="view-header">
         <div>
-          <h2 className="view-title">Adversarial Security Alerts</h2>
+          <div className="view-pretitle-row">
+            <span className="soc-live-status-pill">
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-rose)' }} />
+              <span className="soc-status-text">ANOMALY DETECTION SUBSYSTEM</span>
+            </span>
+          </div>
+          <h2 className="view-title">Adversarial Security Alerts &amp; Incidents</h2>
           <p className="view-subtitle">
-            Anomalies and malicious telemetry patterns flagged by the GhostWave detection engine.
+            Anomalies, timing drifts, and adversarial telemetry patterns flagged by the GhostWave detection engine.
           </p>
         </div>
         <div className="view-header-actions">
@@ -80,25 +90,25 @@ export default function SecurityAlertsView() {
 
       {/* Alert Stats Summary Bar */}
       <div className="alerts-stats-row">
-        <div className="alert-stat-card cyber-card">
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-cyan)' }}>
           <span className="stat-label">Total Flagged Incidents</span>
           <span className="stat-val mono text-cyan">{incidents.length}</span>
           <span className="stat-sub">Persisted in SQLite DB</span>
         </div>
-        <div className="alert-stat-card cyber-card">
-          <span className="stat-label">High Severity</span>
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-rose)' }}>
+          <span className="stat-label">Critical / High Severity</span>
           <span className="stat-val mono text-rose">{highCount}</span>
-          <span className="stat-sub">Protocol &amp; Timestamp violations</span>
+          <span className="stat-sub">Protocol &amp; Timing Violations</span>
         </div>
-        <div className="alert-stat-card cyber-card">
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-amber)' }}>
           <span className="stat-label">Medium Severity</span>
           <span className="stat-val mono text-amber">{mediumCount}</span>
-          <span className="stat-sub">Signal jump &amp; replay anomalies</span>
+          <span className="stat-sub">Signal Jump &amp; Drift Anomalies</span>
         </div>
-        <div className="alert-stat-card cyber-card">
+        <div className="alert-stat-card cyber-card" style={{ '--card-accent': 'var(--color-purple)' }}>
           <span className="stat-label">Distinct Anomaly Types</span>
           <span className="stat-val mono text-purple">{distinctTypes.length}</span>
-          <span className="stat-sub">Classified detector signatures</span>
+          <span className="stat-sub">Classified Detector Signatures</span>
         </div>
       </div>
 
@@ -149,7 +159,7 @@ export default function SecurityAlertsView() {
 
           {/* Type Dropdown */}
           <div className="filter-group">
-            <span className="filter-group-lbl">Type:</span>
+            <span className="filter-group-lbl">Signature:</span>
             <select
               className="cyber-input type-select mono"
               value={typeFilter}
@@ -184,23 +194,25 @@ export default function SecurityAlertsView() {
                 <th>ID</th>
                 <th>Severity</th>
                 <th>Anomaly Signature</th>
-                <th>Telemetry Source</th>
-                <th>Description / Reason</th>
+                <th>Source Sensor</th>
+                <th>Incident Details / Rationale</th>
                 <th>Timestamp</th>
-                <th>Packet Inspector</th>
+                <th>Payload</th>
               </tr>
             </thead>
             <tbody>
               {filteredIncidents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center" style={{ padding: '40px 20px' }}>
+                  <td colSpan={7} className="text-center" style={{ padding: '48px 20px' }}>
                     <div className="empty-alerts-state">
-                      <CheckCircle2 size={36} className="text-emerald" />
-                      <p className="font-semibold text-primary">No Incidents Found</p>
-                      <span className="text-xs text-muted">
+                      <ShieldCheck size={40} className="text-teal" />
+                      <p className="font-semibold text-primary" style={{ fontSize: 16, marginTop: 8 }}>
+                        Zero Security Incidents Detected
+                      </p>
+                      <span className="text-xs text-muted" style={{ maxWidth: 420, display: 'inline-block', marginTop: 4 }}>
                         {incidents.length === 0
-                          ? 'Zero anomalies logged in backend database yet. Trigger an attack simulation in Overview to test.'
-                          : 'No incidents match your current search and severity filters.'}
+                          ? 'All RF telemetry streams have satisfied chronological, monotonic, and power integrity criteria. Run an attack scenario in Overview to test.'
+                          : 'No incidents match the active search and severity filters.'}
                       </span>
                     </div>
                   </td>
@@ -231,7 +243,7 @@ export default function SecurityAlertsView() {
                         <div className="alert-type-name font-semibold" style={{ color: meta.color }}>
                           {meta.label}
                         </div>
-                        <div className="mono text-xs text-muted">
+                        <div className="mono text-2xs text-muted">
                           {inc.alert_type}
                         </div>
                       </td>
@@ -247,7 +259,7 @@ export default function SecurityAlertsView() {
                         )}
                       </td>
                       <td className="mono text-xs text-muted whitespace-nowrap">
-                        <div>{timeAgo(inc.created_at)}</div>
+                        <div className="text-primary font-medium">{timeAgo(inc.created_at)}</div>
                         <div className="text-2xs text-muted">{formatDateTime(inc.created_at)}</div>
                       </td>
                       <td>
@@ -256,7 +268,7 @@ export default function SecurityAlertsView() {
                           onClick={() => setSelectedIncident(inc)}
                         >
                           <Eye size={12} />
-                          <span>View Payload</span>
+                          <span>Inspect</span>
                         </button>
                       </td>
                     </tr>
