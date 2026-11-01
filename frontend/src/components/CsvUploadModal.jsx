@@ -98,21 +98,28 @@ export default function CsvUploadModal({ isOpen, onClose }) {
   const handleDownloadSampleCsv = () => {
     const sampleRows = [
       'timestamp,sequence,source,signal_strength,latency_ms,packet_loss',
-      '2026-11-01T11:00:00Z,1,sensor-01,-47.4,46.5,0.7',
-      '2026-11-01T11:00:01Z,2,sensor-01,-47.1,45.8,0.6',
-      '2026-11-01T11:00:02Z,3,sensor-01,-47.8,47.2,0.8',
-      '2026-11-01T11:00:03Z,4,sensor-01,-95.0,420.0,32.0', // Signal Jump + High Latency
-      '2026-11-01T11:00:04Z,5,sensor-01,-94.5,415.0,30.5',
-      '2026-11-01T11:00:05Z,6,sensor-01,-48.0,48.0,1.0',
-      '2026-11-01T11:00:06Z,7,sensor-01,-48.2,46.0,0.8',
-      '2026-11-01T11:02:30Z,8,sensor-01,-47.9,45.5,0.7'  // Gap > 10s
+      '2026-10-31T10:00:00Z,1,normal_demo,-62,35,0',
+      '2026-10-31T10:00:01Z,2,normal_demo,-63,38,0',
+      '2026-10-31T10:00:02Z,3,normal_demo,-61,36,0',
+      '2026-10-31T10:00:03Z,4,normal_demo,-64,40,0',
+      '2026-10-31T10:01:00Z,10,replay_demo,-70,42,0',
+      '2026-10-31T10:01:01Z,11,replay_demo,-69,41,0',
+      '2026-10-31T10:01:02Z,11,replay_demo,-69,41,0',
+      '2026-10-31T10:01:01Z,11,replay_demo,-69,41,0',
+      '2026-10-31T10:02:00Z,1,network_fault_demo,-65,4500,35',
+      '2026-10-31T10:02:01Z,2,network_fault_demo,-66,4900,48',
+      '2026-10-31T10:03:00Z,1,signal_demo,-60,40,0',
+      '2026-10-31T10:03:01Z,2,signal_demo,-25,42,0',
+      '2026-10-31T10:03:02Z,3,signal_demo,75,45,0',
+      '2026-10-31T10:04:00Z,1,missing_demo,-72,55,1',
+      '2026-10-31T10:04:01Z,4,missing_demo,-73,58,2'
     ];
 
     const blob = new Blob([sampleRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'ghostwave-telemetry-sample.csv';
+    link.download = 'sample_telemetry.csv';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
