@@ -227,3 +227,5 @@ node_modules/
 
 # Build output
 dist/
+# Local GhostWave database
+backend/ghostwave.db
