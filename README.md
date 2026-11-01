@@ -221,7 +221,14 @@ timestamp,sequence,source,signal_strength,latency_ms,packet_loss
 ```
 Fusion-Force-main/
 ├── README.md                      # Complete project documentation
+├── main.py                        # Root entrypoint for Render / cloud deployments
+├── requirements.txt               # Root Python dependencies for Render build
+├── Procfile                       # Process file for cloud container runners
+├── render.yaml                    # Render Infrastructure as Code (Blueprint)
 ├── sample_telemetry.csv           # Benchmark RF telemetry dataset (15 test records)
+├── ghostwave_normal_telemetry.csv # Baseline nominal RF telemetry benchmark
+├── ghostwave_suspicious_telemetry.csv # Adversarial telemetry benchmark (replay & jumps)
+├── ghostwave_missing_invalid_data.csv # Faulty & corrupted telemetry benchmark
 ├── firebase.json                  # Firebase Hosting configuration (site: fusion-force)
 ├── .firebaserc                    # Firebase project mapping (safesyn-b1b29)
 │
@@ -230,7 +237,7 @@ Fusion-Force-main/
 │   ├── detector.py                # GhostWaveDetector multi-layer anomaly algorithms
 │   ├── simulator.py               # Synthetic adversarial scenario generator
 │   ├── database.py                # SQLite database persistence (incidents & audit)
-│   └── requirements.txt           # Python dependencies (fastapi, uvicorn, numpy)
+│   └── requirements.txt           # Backend dependencies (fastapi, uvicorn, numpy, multipart)
 │
 └── frontend/                      # React 19 + Vite SOC Dashboard
     ├── index.html                 # Entry HTML with custom typography
@@ -271,6 +278,24 @@ Fusion-Force-main/
         └── utils/
             └── formatters.js      # Timestamp and severity formatting helpers
 ```
+
+---
+
+## ☁️ Render Cloud Deployment Guide (FastAPI Backend)
+
+When hosting the Python backend on **Render.com**:
+
+| Setting | Value | Notes |
+| :--- | :--- | :--- |
+| **Environment** | `Python` | Standard Python runtime |
+| **Region** | Any (e.g. Frankfurt / Oregon) | Choose closest to users |
+| **Branch** | `main` | Automatic deployments enabled |
+| **Root Directory** | *(leave empty / blank)* | Defaults to repository root |
+| **Build Command** | `pip install -r requirements.txt` | Installs FastAPI, Uvicorn, NumPy, Python-Multipart |
+| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` | Starts production ASGI server binding to Render `$PORT` |
+
+> [!TIP]
+> If you choose to set Render's **Root Directory** to `backend`, the same Start Command (`uvicorn main:app --host 0.0.0.0 --port $PORT`) and Build Command (`pip install -r requirements.txt`) will work identically.
 
 ---
 

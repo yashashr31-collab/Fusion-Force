@@ -113,30 +113,36 @@ async def analyze_csv(file: UploadFile = File(...)):
                 detail="CSV file must contain a header row.",
             )
 
-        reader.fieldnames = [
-            (name or "").strip().lower()
-            for name in reader.fieldnames
-        ]
+        # Standardize column headers
+        col_map = {name.strip().lower(): name for name in reader.fieldnames}
 
-        required_columns = {
-            "timestamp",
-            "sequence",
-            "source",
-            "signal_strength",
-            "latency_ms",
-            "packet_loss",
-        }
+        # Resolve column aliases
+        seq_col = next((col_map[c] for c in ("sequence", "seq", "id", "packet_id", "packet_number") if c in col_map), None)
+        ts_col = next((col_map[c] for c in ("timestamp", "time", "ts", "date") if c in col_map), None)
+        sig_col = next((col_map[c] for c in ("signal_strength", "signal_dbm", "signal", "rssi", "dbm") if c in col_map), None)
+        lat_col = next((col_map[c] for c in ("latency_ms", "latency", "delay", "rtt") if c in col_map), None)
+        loss_col = next((col_map[c] for c in ("packet_loss", "packet_loss_rate", "loss", "loss_rate") if c in col_map), None)
+        src_col = next((col_map[c] for c in ("source", "source_id", "node", "node_id", "sensor", "sensor_id", "device") if c in col_map), None)
 
-        if not required_columns.issubset(set(reader.fieldnames)):
+        missing = []
+        if not seq_col: missing.append("sequence (or seq)")
+        if not ts_col: missing.append("timestamp (or time)")
+        if not sig_col and not lat_col: missing.append("signal_strength (or signal_dbm)")
+
+        if missing:
             raise HTTPException(
                 status_code=400,
                 detail={
                     "message": "CSV is missing required telemetry columns.",
-                    "required_columns": sorted(required_columns),
+                    "missing_columns": missing,
+                    "supported_columns": [
+                        "sequence", "timestamp", "signal_strength (or signal_dbm)",
+                        "latency_ms", "packet_loss", "source"
+                    ]
                 },
             )
 
-        if len(reader.fieldnames) != len(set(reader.fieldnames)):
+        if len(reader.fieldnames) != len(set(name.strip().lower() for name in reader.fieldnames)):
             raise HTTPException(
                 status_code=400,
                 detail="CSV contains duplicate column names.",
@@ -154,35 +160,69 @@ async def analyze_csv(file: UploadFile = File(...)):
                 )
 
             if None in row or any(value is None for value in row.values()):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Malformed CSV row at line {row_number}.",
-                )
+                # Allow minor trailing empty fields, but reject completely malformed rows
+                if not any(str(v or "").strip() for v in row.values()):
+                    continue
 
             if not any(str(value or "").strip() for value in row.values()):
                 continue
 
-            try:
-                packet = {
-                    "timestamp": row["timestamp"].strip(),
-                    "sequence": int(row["sequence"]),
-                    "source": row["source"].strip() or "CSV Upload",
-                    "metrics": {
-                        "signal_strength": float(row["signal_strength"]),
-                        "latency_ms": float(row["latency_ms"]),
-                        "packet_loss": float(row["packet_loss"]),
-                    },
-                }
-            except (ValueError, TypeError, KeyError):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Invalid or missing numeric telemetry value "
-                        f"on CSV row {row_number}."
-                    ),
-                )
+            raw_seq = row.get(seq_col) if seq_col else None
+            raw_ts = row.get(ts_col) if ts_col else None
+            raw_sig = row.get(sig_col) if sig_col else None
+            raw_lat = row.get(lat_col) if lat_col else None
+            raw_loss = row.get(loss_col) if loss_col else None
+            raw_src = (row.get(src_col) or "").strip() if src_col else "sensor-01"
+
+            # Parse sequence
+            seq_val = None
+            if raw_seq is not None and str(raw_seq).strip() != "":
+                try:
+                    seq_val = int(raw_seq)
+                except (ValueError, TypeError):
+                    seq_val = raw_seq
+
+            # Parse timestamp
+            ts_val = str(raw_ts or "").strip()
+
+            # Parse metrics
+            metrics = {}
+            if raw_sig is not None and str(raw_sig).strip() != "":
+                try:
+                    metrics["signal_strength"] = float(raw_sig)
+                except (ValueError, TypeError):
+                    metrics["signal_strength"] = raw_sig
+            if raw_lat is not None and str(raw_lat).strip() != "":
+                try:
+                    metrics["latency_ms"] = float(raw_lat)
+                except (ValueError, TypeError):
+                    metrics["latency_ms"] = raw_lat
+            if raw_loss is not None and str(raw_loss).strip() != "":
+                try:
+                    metrics["packet_loss"] = float(raw_loss)
+                except (ValueError, TypeError):
+                    metrics["packet_loss"] = raw_loss
+            elif "signal_strength" in metrics:
+                metrics["packet_loss"] = 0.0
+
+            packet = {
+                "timestamp": ts_val,
+                "sequence": seq_val if seq_val is not None else row_number,
+                "source": raw_src or "sensor-01",
+                "metrics": metrics,
+            }
 
             alerts = csv_detector.analyze(packet)
+
+            # Check if essential metrics were missing from row
+            if not metrics or ("signal_strength" not in metrics and "latency_ms" not in metrics):
+                alerts.append({
+                    "type": "missing_metric",
+                    "severity": "high",
+                    "message": f"Row {row_number} is missing essential signal/latency measurements.",
+                    "confidence": 0.99,
+                    "evidence": {"row": row_number, "source": packet["source"]}
+                })
 
             for alert in alerts:
                 alert_types.add(alert.get("type", "unknown"))

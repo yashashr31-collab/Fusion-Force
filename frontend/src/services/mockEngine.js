@@ -516,11 +516,22 @@ export async function mockAnalyzeCsv(file) {
   }
 
   const headerRow = rawRows[0].map(h => (h || '').trim().toLowerCase());
-  const requiredColumns = ['timestamp', 'sequence', 'source', 'signal_strength', 'latency_ms', 'packet_loss'];
-  const missingCols = requiredColumns.filter(c => !headerRow.includes(c));
+  
+  // Resolve column aliases
+  const seqCol = ['sequence', 'seq', 'id', 'packet_id', 'packet_number'].find(c => headerRow.includes(c));
+  const tsCol = ['timestamp', 'time', 'ts', 'date'].find(c => headerRow.includes(c));
+  const sigCol = ['signal_strength', 'signal_dbm', 'signal', 'rssi', 'dbm'].find(c => headerRow.includes(c));
+  const latCol = ['latency_ms', 'latency', 'delay', 'rtt'].find(c => headerRow.includes(c));
+  const lossCol = ['packet_loss', 'packet_loss_rate', 'loss', 'loss_rate'].find(c => headerRow.includes(c));
+  const srcCol = ['source', 'source_id', 'node', 'node_id', 'sensor', 'sensor_id', 'device'].find(c => headerRow.includes(c));
 
-  if (missingCols.length > 0) {
-    throw new Error(`CSV is missing required telemetry columns: ${missingCols.join(', ')}`);
+  const missing = [];
+  if (!seqCol) missing.push('sequence');
+  if (!tsCol) missing.push('timestamp');
+  if (!sigCol && !latCol) missing.push('signal_strength (or signal_dbm)');
+
+  if (missing.length > 0) {
+    throw new Error(`CSV is missing required telemetry columns: ${missing.join(', ')}`);
   }
 
   // Check duplicate headers
@@ -549,27 +560,47 @@ export async function mockAnalyzeCsv(file) {
       rowObj[headerRow[c]] = rowValues[c] !== undefined ? rowValues[c] : '';
     }
 
-    const sig = parseFloat(rowObj.signal_strength);
-    const lat = parseFloat(rowObj.latency_ms);
-    const loss = parseFloat(rowObj.packet_loss);
-    const seq = parseInt(rowObj.sequence, 10);
+    const rawSeq = seqCol ? rowObj[seqCol] : null;
+    const rawTs = tsCol ? rowObj[tsCol] : null;
+    const rawSig = sigCol ? rowObj[sigCol] : null;
+    const rawLat = latCol ? rowObj[latCol] : null;
+    const rawLoss = lossCol ? rowObj[lossCol] : null;
+    const rawSrc = srcCol && rowObj[srcCol] ? rowObj[srcCol].trim() : 'sensor-01';
 
-    if (isNaN(sig) || isNaN(lat) || isNaN(loss) || isNaN(seq)) {
-      throw new Error(`Invalid or missing numeric telemetry value on CSV row ${rowNumber}.`);
+    let seq = parseInt(rawSeq, 10);
+    if (isNaN(seq)) {
+      seq = rowNumber;
+    }
+
+    const metrics = {};
+    if (rawSig !== null && rawSig !== '' && !isNaN(parseFloat(rawSig))) {
+      metrics.signal_strength = parseFloat(rawSig);
+    }
+    if (rawLat !== null && rawLat !== '' && !isNaN(parseFloat(rawLat))) {
+      metrics.latency_ms = parseFloat(rawLat);
+    }
+    if (rawLoss !== null && rawLoss !== '' && !isNaN(parseFloat(rawLoss))) {
+      metrics.packet_loss = parseFloat(rawLoss);
+    } else if (metrics.signal_strength !== undefined) {
+      metrics.packet_loss = 0.0;
     }
 
     const packet = {
-      timestamp: String(rowObj.timestamp || '').trim(),
+      timestamp: String(rawTs || '').trim(),
       sequence: seq,
-      source: String(rowObj.source || '').trim() || 'CSV Upload',
-      metrics: {
-        signal_strength: sig,
-        latency_ms: lat,
-        packet_loss: loss
-      }
+      source: rawSrc || 'sensor-01',
+      metrics
     };
 
     const alerts = csvDetector.analyze(packet);
+
+    if (!metrics.signal_strength && !metrics.latency_ms) {
+      alerts.push({
+        type: 'missing_metric',
+        severity: 'high',
+        message: `Row ${rowNumber} is missing essential signal or latency measurements.`
+      });
+    }
 
     for (const alert of alerts) {
       alertTypes.add(alert.type || 'unknown');
